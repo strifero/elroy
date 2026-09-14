@@ -28,7 +28,7 @@ Elroy-350M is a Llama-style decoder: RMSNorm, rotary position embeddings, SwiGLU
 | Vocabulary | 32,768 | 32,768 |
 | Parameters | about 42M | about 360M |
 | Training tokens | 1B | 20B |
-| Hardware | one small GPU, hours | two RTX A4500, about 9 days |
+| Hardware | one small GPU, hours | two RTX A4500, about 6 days |
 
 We started this plan at GPT-2 small (124M, learned positions, GELU). We moved to the Llama recipe once the goal became "as good at coding as this hardware allows" rather than "the simplest possible model." RMSNorm, RoPE and SwiGLU each cost about a paragraph to explain and are what every current small model uses, so a reader who finishes this guide recognizes the shape of real models.
 
@@ -38,7 +38,7 @@ Three things move coding ability at this scale, in order: how many tokens of goo
 
 360M parameters is the largest model that trains comfortably with plain data-parallel on two 20GB cards. Weights, gradients and AdamW state in mixed precision are about 6GB per GPU, leaving room for a large enough micro-batch to keep utilization high without activation checkpointing. Going to 1B would require sharding the optimizer state across GPUs (FSDP), which is another concept to teach, and would need 50B+ tokens to be worth it, which is beyond what two workstation GPUs can do in a month.
 
-Compute check: training FLOPs are about 6 x parameters x tokens, so 6 x 360M x 20B is 4.3e19. Two A4500s are rated at 94 TFLOPS of dense bf16 each; the Chapter 0 smoke test measures 78. At a realistic 35% model FLOPs utilization of the measured figure that is about 55 TFLOPS sustained, so about 220 hours, or 9 days. If the validation loss still has slope at 20B tokens, the run resumes to 30B. That is a decision for day 8, not now.
+Compute check: training FLOPs are about 6 x parameters x tokens, so 6 x 360M x 20B is 4.3e19. Two A4500s are rated at 94 TFLOPS of dense bf16 each; the Chapter 0 smoke test measures 78. We assumed 35% model FLOPs utilization when planning; Chapter 4 measured 70% of the 78 TFLOPS figure with `torch.compile`, which is 13.2 seconds per 524k-token step and about 6 days for the run. If the validation loss still has slope at 20B tokens, the run resumes to 30B. That is a decision for day 8, not now.
 
 ## Data
 
@@ -93,7 +93,7 @@ The repo is the source of truth. Each chapter is also published as a blog post o
 |---|---|---|
 | 0 | Environment on st-ai-1, repo scaffold, smoke test, dataset staging | one session |
 | 1 | Tokenizer, model, training loop, FIM, validated on the mini config | three sessions |
-| 2 | The 350M run | 9 to 11 days, unattended, daily check |
+| 2 | The 350M run | about 6 days, unattended, daily check |
 | 3 | Anneal, SFT, evals | two sessions |
 | 4 | Release, model card, blog conversion | one session |
 
@@ -106,3 +106,4 @@ Docs are written alongside the code in each phase, not afterwards. The write-up 
 - 2026-09-14: Scaled to 350M / 20B tokens / Llama-style architecture / FIM / anneal. Ruled out 1B for this run (needs FSDP and 50B+ tokens).
 - 2026-09-14: Phase 0 done. Measured 78 TFLOPS per A4500 and 41 GiB/s NVLink; revised the run estimate from 8 to 9 days. Dropped smollm-corpus python-edu (same blob-index scheme as Stack-Edu, older source); Stack-Edu Python is the sole educational code source.
 - 2026-09-14: Chapter 1 findings. Stack-Edu Python is 25M files / 67GB, fetched by score via anonymous S3. StarCoderData carries `<reponame>/<filename>/<gh_stars>` header tags in 48% of files; strip them. Only Python-3-parseable files are kept (drops about 6% of code, mostly Python 2).
+- 2026-09-14: Chapters 2 to 4 built and tested. 350M config measured at 39.6k tok/s, 70% MFU, micro_batch 4 (8 OOMs at 20GB). Run estimate revised from 9 days to 6. d_ff raised from 2816 to 3072 so the model lands at 360.8M as planned. Stack-Edu fetcher parallelised across processes with a pre-ranked on-disk index and keep-alive connections (10x).
