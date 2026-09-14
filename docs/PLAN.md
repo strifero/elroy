@@ -105,3 +105,4 @@ Docs are written alongside the code in each phase, not afterwards. The write-up 
 - 2026-09-14: Retargeted to programming questions and code generation. Python only for the published run; the data pipeline treats languages as a config list.
 - 2026-09-14: Scaled to 350M / 20B tokens / Llama-style architecture / FIM / anneal. Ruled out 1B for this run (needs FSDP and 50B+ tokens).
 - 2026-09-14: Phase 0 done. Measured 78 TFLOPS per A4500 and 41 GiB/s NVLink; revised the run estimate from 8 to 9 days. Dropped smollm-corpus python-edu (same blob-index scheme as Stack-Edu, older source); Stack-Edu Python is the sole educational code source.
+- 2026-09-14: Chapter 1 findings. Stack-Edu Python is 25M files / 67GB, fetched by score via anonymous S3. StarCoderData carries `<reponame>/<filename>/<gh_stars>` header tags in 48% of files; strip them. Only Python-3-parseable files are kept (drops about 6% of code, mostly Python 2).
