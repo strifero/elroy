@@ -18,8 +18,10 @@ tokens so the model learns to produce a middle given both sides. Half of the
 FIM documents use the PSM order and half SPM; see fim_transform.
 
 Tokenization runs on all cores in chunks of a few thousand documents. The
-per-worker tokenizer cache makes this mostly dictionary lookups, a few MB/s per
-core in pure Python.
+parent process reads one parquet row group at a time and hands out slices of
+it; workers hold nothing but their slice and a bounded tokenizer cache. The
+per-worker cache makes this mostly dictionary lookups, a few MB/s per core in
+pure Python.
 """
 
 import argparse
@@ -27,6 +29,7 @@ import json
 import os
 import random
 import sys
+import threading
 import time
 from multiprocessing import Pool
 
@@ -68,22 +71,24 @@ def _init(tok_path: str, cfg: dict) -> None:
     _cfg = cfg
 
 
-def _encode_group(job: tuple[str, int, int, int, str, bool, int, int]) -> tuple[str, int, np.ndarray, int]:
-    """Tokenize a slice of one parquet row group.
+def _encode_chunk(job: tuple[list[str], bool, int, int]) -> tuple[np.ndarray, int]:
+    """Tokenize a list of documents.
 
-    The unit of work is CHUNK_DOCS documents, not a whole file or even a whole
-    row group: Stack-Edu's row groups are 100,000 files, and a worker holding
-    100,000 decoded strings plus their token lists is a couple of GB. The first
-    version of this script used whole row groups and the OOM killer took it out
-    at 30GB. Re-reading a row group to take a slice of it costs a little
-    decompression; it is nothing next to tokenization.
+    The unit of work is CHUNK_DOCS documents handed over by the parent, not a
+    parquet row group opened by the worker. Two earlier versions of this script
+    were killed by the OOM killer at 30GB: the first had every worker decode a
+    whole 100,000-file row group (a couple of GB each), the second re-read the
+    row group in each worker to take a 4,000-document slice, which still left
+    every worker holding pyarrow's decompression buffers for the whole group.
+    With 24 workers that is the whole machine. Now only the parent touches
+    parquet, one row group at a time, and a worker's memory is its slice, the
+    tokenizer and a capped cache.
     """
-    path, group, offset, count, column, is_code, max_docs, seed = job
+    texts, is_code, max_docs, seed = job
     rng = random.Random(seed)
     clean = clean_code if is_code else clean_text
     out: list[np.ndarray] = []
     n_docs = 0
-    texts = pq.ParquetFile(path).read_row_group(group, columns=[column]).slice(offset, count).column(0).to_pylist()
     for t in texts:
         t = clean(t)
         if t is None:
@@ -98,7 +103,26 @@ def _encode_group(job: tuple[str, int, int, int, str, bool, int, int]) -> tuple[
         n_docs += 1
         if max_docs and n_docs >= max_docs:
             break
-    return path, group, (np.concatenate(out) if out else np.zeros(0, dtype=np.uint16)), n_docs
+    return (np.concatenate(out) if out else np.zeros(0, dtype=np.uint16)), n_docs
+
+
+def iter_jobs(groups: list[tuple[str, int]], column: str, is_code: bool, max_docs: int,
+              seed: int, slots: threading.Semaphore):
+    """Yield (texts, is_code, max_docs, seed) chunks, one row group at a time.
+
+    Pool.imap consumes its input on a feeder thread as fast as it can, so a
+    plain generator would read the entire corpus into the task queue. The
+    semaphore holds a fixed number of chunks in flight; the consumer releases a
+    slot for every result it takes.
+    """
+    k = 0
+    for path, g in groups:
+        texts = pq.ParquetFile(path).read_row_group(g, columns=[column]).column(0).to_pylist()
+        for off in range(0, len(texts), CHUNK_DOCS):
+            slots.acquire()
+            yield texts[off:off + CHUNK_DOCS], is_code, max_docs, seed + k
+            k += 1
+        del texts
 
 
 class ShardWriter:
@@ -169,29 +193,25 @@ def main() -> None:
                 continue
             t0 = time.time()
             writer = ShardWriter(os.path.join(args.out, name), args.shard_tokens, args.val_tokens)
-            jobs = []
+            groups = []
             for f in files:
-                pf = pf_meta = pq.ParquetFile(f)
-                groups = range(pf.num_row_groups)
-                if args.max_docs:
-                    groups = range(min(2, len(groups)))
-                for g in groups:
-                    n_rows = pf_meta.metadata.row_group(g).num_rows
-                    for off in range(0, n_rows, CHUNK_DOCS):
-                        jobs.append((f, g, off, min(CHUNK_DOCS, n_rows - off), src.column, src.is_code,
-                                     args.max_docs, args.seed + len(jobs)))
+                n = pq.ParquetFile(f).num_row_groups
+                groups.extend((f, g) for g in range(min(2, n) if args.max_docs else n))
             # Shuffle the row groups (seeded) so the token stream, and therefore the val
             # split at its head, is a mix of files rather than the first file in order.
             # Stack-Edu shards are fetched best-score-first, so without this the val
             # set would be all score-5 files and training would see the scores in order.
-            random.Random(args.seed).shuffle(jobs)
+            random.Random(args.seed).shuffle(groups)
             docs = 0
+            slots = threading.Semaphore(args.workers * 2)
+            jobs = iter_jobs(groups, src.column, src.is_code, args.max_docs, args.seed, slots)
             # imap keeps job order, so shards are deterministic for a given seed
-            for i, (path, group, arr, n) in enumerate(pool.imap(_encode_group, jobs)):
+            for i, (arr, n) in enumerate(pool.imap(_encode_chunk, jobs)):
+                slots.release()
                 writer.add(arr)
                 docs += n
-                if i % 100 == 0 or i == len(jobs) - 1:
-                    print(f"  {name}: {i + 1}/{len(jobs)} chunks, {docs:,} docs, "
+                if i % 100 == 0:
+                    print(f"  {name}: {i + 1} chunks, {docs:,} docs, "
                           f"{writer.total / 1e9:.3f}B tokens", flush=True)
             writer.close()
             dt = time.time() - t0

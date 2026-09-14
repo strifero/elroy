@@ -10,9 +10,9 @@ python scripts/build_shards.py --tokenizer data/tokenizer.json --out data/shards
 
 Training reads tokens, not text, so tokenization happens once, up front. For each source the script reads the parquet files, applies the Chapter 1 cleaning rules, tokenizes each document, appends `<|endoftext|>`, and writes the concatenated stream as `uint16` NumPy arrays of 100M tokens. The first 2M tokens of each source are split off as `val.npy`. A `manifest.json` records the counts.
 
-Two details matter. Row groups, not files, are the unit of work, so no single result the worker pool hands back is more than a few hundred MB. And the row groups are shuffled (seeded) before tokenization, because Stack-Edu was fetched best-score-first: without the shuffle, `val.npy` would be all score-5 files and training would march through the scores in order.
+Two details matter. The row groups are shuffled (seeded) before tokenization, because Stack-Edu was fetched best-score-first: without the shuffle, `val.npy` would be all score-5 files and training would march through the scores in order. And only the parent process touches parquet: it reads one row group at a time, hands 4,000-document slices to the worker pool, and a semaphore keeps at most two chunks per worker in flight. That last part cost two failed attempts. The first version gave each worker a whole row group to decode; Stack-Edu's row groups are 100,000 files, a worker holding the decoded strings plus their token lists was a couple of GB, and 24 of them tripped the OOM killer at 30GB. The second version had each worker re-read the row group and take a slice, which still left every worker holding pyarrow's decompression buffers for the whole group, about 1.3GB each, and died the same way seventeen minutes in. `Pool.imap` has its own trap: it drains its input on a feeder thread as fast as it can, so a generator that reads the corpus lazily would still end up with the whole corpus in the task queue. The semaphore is what bounds it. The final version runs at 6GB total.
 
-Throughput is 2 to 8M tokens per second across 24 cores. The code sources are slower because every file goes through `ast.parse`. The full corpus takes about an hour and a half.
+Throughput is about 11M tokens per second across 24 cores on the code sources, faster on English. The full corpus takes under an hour.
 
 ### Fill-in-the-middle
 
