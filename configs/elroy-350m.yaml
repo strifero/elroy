@@ -1,0 +1,46 @@
+# Elroy-350M: the published run.
+# 24-layer Llama-style decoder, about 360M parameters with a 32k tied vocabulary.
+# Trained on two RTX A4500 (20GB, NVLink) for about 20B tokens.
+name: elroy-350m
+
+model:
+  vocab_size: 32768
+  n_layer: 24
+  n_head: 16
+  d_model: 1024
+  d_ff: 2816          # SwiGLU hidden, 2.75x d_model
+  seq_len: 2048
+  rope_theta: 10000
+  tie_embeddings: true
+  dropout: 0.0
+
+data:
+  shards_dir: data/shards
+  mix:
+    python_edu: 0.45
+    python_stack: 0.20
+    fineweb_edu: 0.25
+    cosmopedia: 0.10
+  anneal_mix:          # used for the final anneal_fraction of training
+    python_edu: 0.70
+    fineweb_edu: 0.15
+    sft_style: 0.15
+  fim_rate: 0.5
+  fim_spm_rate: 0.5
+
+train:
+  total_tokens: 20_000_000_000
+  tokens_per_step: 524_288      # 2048 seq x 256 sequences per optimizer step
+  micro_batch: 8                # per-GPU; set from the Chapter 4 sweep on the A4500s
+  lr: 4.0e-4
+  min_lr_ratio: 0.1
+  warmup_steps: 1000
+  anneal_fraction: 0.10
+  weight_decay: 0.1
+  betas: [0.9, 0.95]
+  grad_clip: 1.0
+  dtype: bfloat16
+  compile: true
+  eval_every: 500
+  checkpoint_every: 1000
+  seed: 1337
