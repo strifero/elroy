@@ -8,7 +8,7 @@ sleep 2
 rm -f data/raw/stack-edu-text/*.tmp
 echo "shards on disk: $(ls data/raw/stack-edu-text/shard-*.parquet 2>/dev/null | wc -l)"
 start() {
-  setsid nohup .venv/bin/python scripts/fetch_stack_edu.py --target-bytes 32e9 --workers 96 \
+  setsid nohup .venv/bin/python scripts/fetch_stack_edu.py --target-bytes ${TARGET:-40e9} --workers 96 \
       --process-index "$1" --process-count "$N" > "logs/fetch-p$1.log" 2>&1 < /dev/null &
 }
 start 0
