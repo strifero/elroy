@@ -38,4 +38,5 @@ train:
   compile: true
   eval_every: 250
   checkpoint_every: 500
+  milestone_every_tokens: 500_000_000
   seed: 1337

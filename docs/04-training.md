@@ -1,0 +1,111 @@
+# Chapter 4: The training loop
+
+By the end of this chapter the corpus is on disk as token shards, the model is training on both GPUs at 70% of their measured peak, and you can kill the process at any moment and resume it exactly where it stopped. This chapter also answers the question the plan left open: how many days.
+
+## Step 1: shards
+
+```bash
+python scripts/build_shards.py --tokenizer data/tokenizer.json --out data/shards
+```
+
+Training reads tokens, not text, so tokenization happens once, up front. For each source the script reads the parquet files, applies the Chapter 1 cleaning rules, tokenizes each document, appends `<|endoftext|>`, and writes the concatenated stream as `uint16` NumPy arrays of 100M tokens. The first 2M tokens of each source are split off as `val.npy`. A `manifest.json` records the counts.
+
+Two details matter. Row groups, not files, are the unit of work, so no single result the worker pool hands back is more than a few hundred MB. And the row groups are shuffled (seeded) before tokenization, because Stack-Edu was fetched best-score-first: without the shuffle, `val.npy` would be all score-5 files and training would march through the scores in order.
+
+Throughput is 2 to 8M tokens per second across 24 cores. The code sources are slower because every file goes through `ast.parse`. The full corpus takes about an hour and a half.
+
+### Fill-in-the-middle
+
+Half of the code documents are rearranged before tokenization:
+
+```
+PSM:  <|fim_prefix|>{prefix}<|fim_suffix|>{suffix}<|fim_middle|>{middle}
+SPM:  <|fim_prefix|><|fim_suffix|>{suffix}<|fim_middle|>{prefix}{middle}
+```
+
+Two random character positions split the file into prefix, middle and suffix. In PSM order the model sees the prefix, then the suffix, then has to produce the middle; SPM puts the suffix first. Half of the FIM documents use each. At inference, a user who wants a function body filled in constructs the same prompt and the model completes the middle. The cost is zero: it is the same next-token objective on a rearranged document. The benefit is that a model trained this way can be used inside an editor, not only at the end of a file. This is the recipe from the original FIM paper and from StarCoder.
+
+## Step 2: the loader
+
+`elroy/loader.py` memory-maps every shard, enumerates every non-overlapping window of `seq_len + 1` tokens per source, gives each GPU its share (window `i` belongs to rank `i % world_size`), and walks them in a seeded random order. Each row of a batch picks its source by the mix weights (45/20/25/10). The loader's whole state is a position per source plus an RNG, so a checkpoint can resume the exact sequence of batches.
+
+If a source runs out it wraps to a second epoch with a new permutation and says so on stdout. With 20B tokens of training and a corpus a little larger than that, no source should wrap; if one does, the mix is off.
+
+## Step 3: the loop
+
+`elroy/train.py` is the whole thing, about 250 lines. The core is this:
+
+```python
+for k in range(grad_accum):
+    x, y = loader.next_batch()
+    model.require_backward_grad_sync = (k == grad_accum - 1)
+    with torch.autocast(device_type="cuda", dtype=torch.bfloat16):
+        _, loss = model(x, y)
+    (loss / grad_accum).backward()
+grad_norm = clip_grad_norm_(model.parameters(), 1.0)
+optimizer.step()
+optimizer.zero_grad(set_to_none=True)
+```
+
+One optimizer step consumes `tokens_per_step` tokens, 524,288 for Elroy-350M, regardless of hardware. The GPU can only hold `micro_batch` sequences at a time, so the loop runs `grad_accum` forward-backward passes per GPU and lets the gradients add up before stepping. With two GPUs, `micro_batch` 4 and `seq_len` 2048, that is 32 micro-steps per optimizer step. The `require_backward_grad_sync` line tells DDP to exchange gradients between the GPUs only on the last micro-step rather than on every one, which matters: the exchange is 1.4GB.
+
+Precision: parameters and optimizer state stay in fp32; the forward and backward run in bf16 under `autocast`. bf16 has the exponent range of fp32 and needs no loss scaling. RMSNorm and the cross-entropy cast back to fp32 internally because those are the two places where bf16's eight bits of mantissa hurt.
+
+Optimizer: AdamW with `betas` (0.9, 0.95), weight decay 0.1 on the matrices and none on the norm gains, gradient clipping at 1.0. These are the GPT-3 / Llama defaults and there is no reason to touch them at this scale.
+
+Learning rate: 1,000 steps of linear warmup to 4e-4, cosine decay to 4e-5 over the main phase, then a straight line to zero over the final 10% while the data mix switches to `anneal_mix`. The plan explains why the anneal exists; the loop just implements it by calling `loader.set_mix` at the boundary.
+
+`torch.compile` wraps the model. It fuses the elementwise work (RMSNorm, RoPE, SiLU, the residual adds) into a handful of kernels and roughly doubles throughput. Compilation takes about a minute on the first step.
+
+## Step 4: tune for the hardware you have
+
+This is where the standing rule applies: measure on the actual cards, do not copy numbers from a different machine.
+
+```bash
+bash scripts/sweep_micro_batch.sh configs/elroy-350m.yaml data/shards-dev "4 8 16"
+```
+
+On the two A4500s:
+
+| micro_batch | Result |
+|---|---|
+| 4 | 39.6k tokens/s, 13.2 s per step, 70% MFU, 18.9GB per GPU |
+| 8 | out of memory |
+| 16 | out of memory |
+
+So `micro_batch` is 4. The 70% MFU is against the 78 TFLOPS we measured in Chapter 0, or 58% against the 94 on the spec sheet, and it is about as good as a dense model gets without hand-written kernels. The memory at 4 is almost entirely activations plus the logits: `4 x 2048 x 32768` logits in fp32 for the loss is 1GB on its own. Activation checkpointing would let `micro_batch` 8 fit at the cost of recomputing the forward pass, and would be slower; there is no reason to want it here.
+
+For the mini config on one GPU: `micro_batch` 16 at `seq_len` 1024 uses 6.3GB and runs at 157k tokens/s, 61% MFU. A 12GB card is comfortable; an 8GB card should drop to 8.
+
+## Step 5: how long
+
+38,146 steps at 13.2 seconds is 140 hours, about 5.9 days, plus a few percent for evaluation and checkpoints. Call it 6 days. The plan said 9 based on an assumed 35% MFU; the measured 70% is what changed it.
+
+## Checkpoints and resume
+
+Every 250 steps (about 55 minutes) the loop writes `checkpoints/elroy-350m/latest.pt`: model, optimizer, step, the loader position on every rank, and the RNG states, about 4.3GB. Every 5B tokens the current checkpoint is also hard-linked as a permanent `step-NNNNNNN.pt`. The file is written to a temporary name and renamed, so a crash mid-write cannot corrupt the last good one.
+
+Resuming is the same command with no extra flags. We tested it: run 6 steps, stop, run 8 more, and the step counter, learning rate and loss continue as if nothing happened. Resuming on a different number of GPUs restores the model and optimizer but restarts the data order from a fresh permutation, and says so.
+
+## Evaluation during training
+
+Every 250 steps the loop computes the loss on 64 held-out windows per source. Four numbers, not one: `python_edu`, `python_stack`, `fineweb_edu`, `cosmopedia`. Watching them separately is what tells you whether the code is improving or whether the English is carrying the average. The log is a JSONL file with one record per step, which Chapter 5 turns into curves.
+
+## The 10-minute check
+
+Before spending six days, spend ten minutes:
+
+```bash
+python scripts/build_shards.py --tokenizer data/tokenizer.json --out data/shards-dev --max-docs 3000 --max-files 3
+python -m elroy.train --config configs/mini.yaml --shards data/shards-dev --max-steps 200
+```
+
+The loss should fall from about 10.4 to under 7 in the first couple of hundred steps of the mini config. If it does not move, something upstream is wrong and no amount of GPU time will fix it. Ours did:
+
+```
+(filled in from the mini run in Chapter 5)
+```
+
+## Next
+
+Chapter 5 is the real run: what the curves looked like, what broke, and what the model could do at each milestone.

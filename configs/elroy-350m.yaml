@@ -8,7 +8,7 @@ model:
   n_layer: 24
   n_head: 16
   d_model: 1024
-  d_ff: 2816          # SwiGLU hidden, 2.75x d_model
+  d_ff: 3072          # SwiGLU hidden, 3x d_model
   seq_len: 2048
   rope_theta: 10000
   tie_embeddings: true
@@ -31,7 +31,7 @@ data:
 train:
   total_tokens: 20_000_000_000
   tokens_per_step: 524_288      # 2048 seq x 256 sequences per optimizer step
-  micro_batch: 8                # per-GPU; set from the Chapter 4 sweep on the A4500s
+  micro_batch: 4                # per-GPU; the Chapter 4 sweep on the A4500s: 4 fits (18.9GB), 8 does not
   lr: 4.0e-4
   min_lr_ratio: 0.1
   warmup_steps: 1000
@@ -41,6 +41,7 @@ train:
   grad_clip: 1.0
   dtype: bfloat16
   compile: true
-  eval_every: 500
-  checkpoint_every: 1000
+  eval_every: 250
+  checkpoint_every: 250          # about 90 minutes apart on the A4500s
+  milestone_every_tokens: 5_000_000_000   # keep a permanent copy every 5B tokens
   seed: 1337

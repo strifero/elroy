@@ -23,7 +23,7 @@ Elroy-350M is a Llama-style decoder: RMSNorm, rotary position embeddings, SwiGLU
 | Layers | 8 | 24 |
 | Width | 512 | 1024 |
 | Heads | 8 | 16 |
-| FFN hidden | 1408 | 2816 |
+| FFN hidden | 1408 | 3072 |
 | Context | 1024 | 2048 |
 | Vocabulary | 32,768 | 32,768 |
 | Parameters | about 42M | about 360M |
