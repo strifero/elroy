@@ -103,8 +103,15 @@ python -m elroy.train --config configs/mini.yaml --shards data/shards-dev --max-
 The loss should fall from about 10.4 to under 7 in the first couple of hundred steps of the mini config. If it does not move, something upstream is wrong and no amount of GPU time will fix it. Ours did:
 
 ```
-(filled in from the mini run in Chapter 5)
+step      1/3814 loss 10.4905 lr 2.00e-06 gn 3.36 |   2856 ms   91.8k tok/s mfu 35.9% mem 6.0G
+step     25/3814 loss 9.5680 lr 5.00e-05 gn 1.33 |   1690 ms  155.1k tok/s mfu 60.7% mem 6.3G
+step     50/3814 loss 8.4633 lr 1.00e-04 gn 1.18 |   1702 ms  154.0k tok/s mfu 60.3% mem 6.3G
+step    100/3814 loss 6.7787 lr 2.00e-04 gn 1.55 |   1709 ms  153.4k tok/s mfu 60.0% mem 6.3G
+step    150/3814 loss 5.7986 lr 3.00e-04 gn 1.32 |   1710 ms  153.3k tok/s mfu 60.0% mem 6.3G
+step    200/3814 loss 5.3194 lr 4.00e-04 gn 0.89 |   1711 ms  153.2k tok/s mfu 60.0% mem 6.3G | val python_edu 4.873 python_stack 5.738 fineweb_edu 5.956 cosmopedia 6.177
 ```
+
+Six minutes, 52M tokens, loss from 10.49 to 5.32, and the per-source validation losses already say something: the Python sources are easier than the English ones, and Stack-Edu (beginner-heavy, repetitive) is the easiest of all. The first step is slow because `torch.compile` is compiling.
 
 ## Next
 

@@ -109,9 +109,17 @@ And for the budget, using rough bytes-per-token figures (about 3.5 for code with
 
 ## Final inventory
 
+`inspect_data.py` over everything on disk, after the fetch:
+
 ```
-(filled in when the Stack-Edu fetch completes)
+source          files         docs      GB    mean     p50      p90      p99  parses
+python_edu        155   15,499,954   41.10    2652    1324     5922    20579   90.8%
+python_stack       20    4,361,580   20.60    4724    1883    10505    42204   48.8%
+fineweb_edu        14    9,672,101   45.97    4753    2951     8913    35323    nan%
+cosmopedia         10    3,762,890   14.11    3750    3454     5627     8095    nan%
 ```
+
+The `python_stack` parse rate is before the header strip (94% after, per the sample above); `python_edu` is after the size filter. 122GB of text, 15.5M Python files from Stack-Edu, and the `parses` column is what the shard builder will enforce.
 
 ## Next
 
