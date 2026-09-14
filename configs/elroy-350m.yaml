@@ -21,10 +21,10 @@ data:
     python_stack: 0.20
     fineweb_edu: 0.25
     cosmopedia: 0.10
-  anneal_mix:          # used for the final anneal_fraction of training
-    python_edu: 0.70
+  anneal_mix:          # used for the final anneal_fraction of training (2B tokens)
+    python_edu: 0.60   # the main phase uses 8.1B of its 9.69B; 0.60 x 2B leaves it short of wrapping
+    cosmopedia: 0.25   # textbook-style explanations, the closest thing in the corpus to the chat register
     fineweb_edu: 0.15
-    sft_style: 0.15
   fim_rate: 0.5
   fim_spm_rate: 0.5
 

@@ -12,7 +12,22 @@ Training reads tokens, not text, so tokenization happens once, up front. For eac
 
 Two details matter. The row groups are shuffled (seeded) before tokenization, because Stack-Edu was fetched best-score-first: without the shuffle, `val.npy` would be all score-5 files and training would march through the scores in order. And only the parent process touches parquet: it reads one row group at a time, hands 4,000-document slices to the worker pool, and a semaphore keeps at most two chunks per worker in flight. That last part cost two failed attempts. The first version gave each worker a whole row group to decode; Stack-Edu's row groups are 100,000 files, a worker holding the decoded strings plus their token lists was a couple of GB, and 24 of them tripped the OOM killer at 30GB. The second version had each worker re-read the row group and take a slice, which still left every worker holding pyarrow's decompression buffers for the whole group, about 1.3GB each, and died the same way seventeen minutes in. `Pool.imap` has its own trap: it drains its input on a feeder thread as fast as it can, so a generator that reads the corpus lazily would still end up with the whole corpus in the task queue. The semaphore is what bounds it. The final version runs at 6GB total.
 
-Throughput is about 11M tokens per second across 24 cores on the code sources, faster on English. The full corpus takes under an hour.
+Throughput is parent-bound: 3.8M tokens per second on Stack-Edu (short files, so the parent spends its time decoding strings and pickling), 10M on StarCoderData and Cosmopedia, 15M on FineWeb-Edu. The full corpus took 66 minutes and produced 52GB of shards:
+
+```
+source        docs         tokens   train shards
+python_edu    13,725,239   9.687B    97
+python_stack   3,768,950   4.340B    44
+fineweb_edu    9,672,101  10.695B   107
+cosmopedia     3,761,237   2.818B    29
+total         30,927,527  27.540B   277
+```
+
+Against the Chapter 2 estimates (11B, 5B, 10B, 3B) the code sources came in lower: the parse filter and the header strip together dropped 11% of Stack-Edu's documents and 14% of StarCoderData's, and FIM adds three tokens per transformed file, not enough to matter. The budget still holds. At the 45/20/25/10 mix, 18B tokens of main phase uses 8.1B of `python_edu` and 3.6B of `python_stack`, and no source wraps.
+
+### The anneal mix
+
+The plan called for the final 10% of training to shift toward the best Python plus a slice of instruction-style data. The first config wrote that down literally, with a `sft_style` source in `anneal_mix`, and there is no such shard source: the instruction data belongs to Chapter 7, where it gets a loss mask, and was never built into pretraining shards. The loader would have accepted it anyway, dropping the unknown name and renormalizing over the other two, silently, at step 34,331. Two changes. `MixLoader.check_mix` now refuses a mix that names a source without shards, and `train.py` checks the anneal mix at startup so the failure is in the first second rather than five days in. And the anneal mix is now `python_edu` 0.60, `cosmopedia` 0.25, `fineweb_edu` 0.15. The `python_edu` share is capped by what is left after the main phase (1.59B of 2B), and Cosmopedia's textbook register is the closest thing in the corpus to the answering style Chapter 7 trains.
 
 ### Fill-in-the-middle
 

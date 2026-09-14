@@ -86,8 +86,17 @@ class MixLoader:
         self.rng = np.random.default_rng([seed, rank, 12345])
         self.epochs_seen = {n: 0 for n in names}
 
+    def check_mix(self, mix: dict[str, float]) -> None:
+        """Refuse a mix that names a source with no shards. train.py checks the anneal
+        mix at startup so a typo fails in the first second, not five days in; without
+        this, set_mix would silently renormalize over the sources it does have."""
+        unknown = [n for n, w in mix.items() if w > 0 and n not in self.streams]
+        if unknown:
+            raise KeyError(f"mix names sources with no shards: {unknown}; have {self.names}")
+
     def set_mix(self, mix: dict[str, float]) -> None:
         """Change the sampling weights mid-run (used for the anneal phase)."""
+        self.check_mix(mix)
         total = sum(mix.get(n, 0.0) for n in self.names)
         self.weights = np.array([mix.get(n, 0.0) / total for n in self.names])
 

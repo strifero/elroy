@@ -51,13 +51,13 @@ About 20B tokens, roughly 65% Python and 35% English.
 | FineWeb-Edu | 25% | So the model can read a question. Educational filter keeps it dense. |
 | Cosmopedia v2 | 10% | Synthetic textbook-style explanations; small models learn explanation from it. |
 
-The last 10% of training is an anneal: the learning rate decays to zero while the mix shifts to the highest-quality Python plus a slice of instruction-style data. MiniCPM and SmolLM both showed this phase is worth far more than its token count.
+The last 10% of training is an anneal: the learning rate decays to zero while the mix shifts toward the highest-quality Python (60%) and Cosmopedia's textbook-style explanations (25%), with FineWeb-Edu at 15%. MiniCPM and SmolLM both showed this phase is worth far more than its token count. The plan originally put a slice of instruction-style data here too; that data lives in Chapter 7 with a loss mask, and there are no pretraining shards of it, so the anneal uses the corpus it has.
 
 Stack Overflow would be ideal question-and-answer data. It is CC-BY-SA, which would force share-alike terms on the weights, so it stays out.
 
 Stack-Edu is an index, not a corpus: each row is a Software Heritage blob id plus a quality score, and the file contents are fetched from the public `softwareheritage` S3 bucket (anonymous HTTPS works, no AWS account needed). Chapter 1 writes the fetcher. About 82% of Stack-Edu's Python is "no license detected" and 18% carries a permissive license; this is the same basis The Stack v2 and StarCoder2 trained on, and we follow it, with a `--permissive-only` flag for anyone who wants the stricter set. StarCoderData is gated behind a click-through on Hugging Face; accept the terms and set `HF_TOKEN`.
 
-Raw parquet lands in `data/raw/` and is tokenized into uint16 shards under `data/shards/`. The shards are about 40GB for 20B tokens.
+Raw parquet lands in `data/raw/` and is tokenized into uint16 shards under `data/shards/`. The final shards are 27.5B tokens in 52GB: python_edu 9.69B, python_stack 4.34B, fineweb_edu 10.69B, cosmopedia 2.82B (Chapter 4 has the table).
 
 ## Tokenizer
 
@@ -107,3 +107,4 @@ Docs are written alongside the code in each phase, not afterwards. The write-up 
 - 2026-09-14: Phase 0 done. Measured 78 TFLOPS per A4500 and 41 GiB/s NVLink; revised the run estimate from 8 to 9 days. Dropped smollm-corpus python-edu (same blob-index scheme as Stack-Edu, older source); Stack-Edu Python is the sole educational code source.
 - 2026-09-14: Chapter 1 findings. Stack-Edu Python is 25M files / 67GB, fetched by score via anonymous S3. StarCoderData carries `<reponame>/<filename>/<gh_stars>` header tags in 48% of files; strip them. Only Python-3-parseable files are kept (drops about 6% of code, mostly Python 2).
 - 2026-09-14: Chapters 2 to 4 built and tested. 350M config measured at 39.6k tok/s, 70% MFU, micro_batch 4 (8 OOMs at 20GB). Run estimate revised from 9 days to 6. d_ff raised from 2816 to 3072 so the model lands at 360.8M as planned. Stack-Edu fetcher parallelised across processes with a pre-ranked on-disk index and keep-alive connections (10x).
+- 2026-09-14: Shards built (third attempt; the first two were OOM-killed, Chapter 4 explains). 27.5B tokens, 52GB. Anneal mix changed to python_edu 0.60 / cosmopedia 0.25 / fineweb_edu 0.15 after finding the config named a source with no shards; the loader now refuses that at startup. 350M run launched.

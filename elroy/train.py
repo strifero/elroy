@@ -142,6 +142,8 @@ def main() -> None:
     optimizer = torch.optim.AdamW(model.param_groups(tcfg["weight_decay"]), lr=tcfg["lr"],
                                   betas=tuple(tcfg["betas"]), fused=device.type == "cuda")
     loader = MixLoader(shards_dir, dcfg["mix"], seq_len, micro, rank, world, tcfg["seed"], device)
+    if "anneal_mix" in dcfg:
+        loader.check_mix(dcfg["anneal_mix"])
     if master:
         avail = loader.tokens_available()
         print("tokens available per source (this rank): " +
