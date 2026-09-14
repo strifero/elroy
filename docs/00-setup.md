@@ -22,7 +22,7 @@ We use [uv](https://docs.astral.sh/uv/) to make a Python 3.12 virtual environmen
 
 ```bash
 curl -LsSf https://astral.sh/uv/install.sh | sh
-git clone https://github.com/strifetech/elroy.git
+git clone https://github.com/strifero/elroy.git
 cd elroy
 uv venv --python 3.12 .venv
 source .venv/bin/activate
