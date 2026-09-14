@@ -59,12 +59,12 @@ https://softwareheritage.s3.amazonaws.com/content/<blob_id>
 So step 2 is a fetcher. `scripts/fetch_stack_edu.py` loads all five index files (23.7M Python files after dropping anything under 200 bytes or over 100KB), ranks them by score with a seeded shuffle inside each score, and pulls them down with a thread pool, writing parquet shards of 100,000 files each. It stops at a byte target. Shards are written to a temporary name and renamed when complete, so you can kill it and rerun; it resumes at the first missing shard.
 
 ```bash
-bash scripts/restart_fetch.sh 4      # four processes, 96 threads each
+TARGET=40e9 bash scripts/restart_fetch.sh 4      # four processes, 96 threads each
 ```
 
-Our numbers, and a lesson. The first version opened a fresh HTTPS connection per file with `urllib` and managed about 780 files per second from one process, about 1.3MB/s of text because score-5 files are short (median 1.1KB); 32GB would have taken seven hours. Running four copies made it *slower*: four processes times 96 threads was 384 TLS handshakes in flight at once, and S3 latency climbed to over a second. The fix was one persistent `http.client.HTTPSConnection` per thread, reused for every request. A 2KB blob takes a few milliseconds to transfer and about 100ms to negotiate TLS for, so keep-alive is worth about 10x: each process now does 1,700 files per second and four of them together fetch 32GB in about 45 minutes. The processes split the shard numbers between them (`--process-index`, `--process-count`) and read the ranked index from a parquet file with one row group per shard, so none of them holds the 24M-row index in memory.
+Our numbers, and a lesson. The first version opened a fresh HTTPS connection per file with `urllib` and managed about 780 files per second from one process, about 1.3MB/s of text because score-5 files are short (median 1.1KB); 32GB would have taken seven hours. Running four copies made it *slower*: four processes times 96 threads was 384 TLS handshakes in flight at once, and S3 latency climbed to over a second. The fix was one persistent `http.client.HTTPSConnection` per thread, reused for every request. A 2KB blob takes a few milliseconds to transfer and about 100ms to negotiate TLS for, so keep-alive is worth about 10x: each process now does 1,700 files per second and four of them together fetch 40GB in about an hour. The processes split the shard numbers between them (`--process-index`, `--process-count`) and read the ranked index from a parquet file with one row group per shard, so none of them holds the 24M-row index in memory.
 
-Two things to know about this data. The score distribution is lopsided: of 25M Python files, 1% score 5, 21% score 4, 78% score 3. Fetching highest-first means our 32GB is all of the 5s and 4s plus a random slice of the 3s. And 82% of the files have no detected license. That is not the same as a restrictive license: The Stack v2 excludes non-permissive licenses up front, so "no_license" means the repository had no license file. StarCoder2 trained on exactly this set. We follow that precedent; `--permissive-only` keeps the 18% that carry an explicit permissive license if you would rather be strict.
+Two things to know about this data. The score distribution is lopsided: of 25M Python files, 1% score 5, 21% score 4, 78% score 3. Fetching highest-first means our 40GB is all of the 5s and 4s plus a random slice of the 3s. And 82% of the files have no detected license. That is not the same as a restrictive license: The Stack v2 excludes non-permissive licenses up front, so "no_license" means the repository had no license file. StarCoder2 trained on exactly this set. We follow that precedent; `--permissive-only` keeps the 18% that carry an explicit permissive license if you would rather be strict.
 
 ## Step 3: look at it
 
@@ -105,7 +105,7 @@ The cleaning rules that Chapter 2's tokenizer training and Chapter 4's shard bui
 2. Drop files that do not parse with `ast.parse` under Python 3.
 3. Drop files under 200 bytes or over 100KB (already applied at fetch time for Stack-Edu).
 
-And for the budget, using rough bytes-per-token figures (about 3.5 for code with a code-aware tokenizer, about 4.5 for English): 32GB of Stack-Edu is about 9B tokens, 20GB of StarCoderData is about 5B after filtering, half of FineWeb-Edu's 10BT sample is 5B, and the 10 Cosmopedia shards are 3B. That is the 20B token, 65% Python mix from the plan, with headroom. Chapter 2 replaces the estimates with real token counts.
+And for the budget, using rough bytes-per-token figures (about 3.5 for code with a code-aware tokenizer, about 4.5 for English): 40GB of Stack-Edu is about 11B tokens, 20GB of StarCoderData is about 5B after filtering, half of FineWeb-Edu's 10BT sample is 5B, and the 10 Cosmopedia shards are 3B. That is the 20B token, 65% Python mix from the plan, with headroom. Chapter 2 replaces the estimates with real token counts.
 
 ## Final inventory
 
