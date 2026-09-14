@@ -17,8 +17,9 @@ prefix, middle and suffix, and the pieces are rearranged with the FIM special
 tokens so the model learns to produce a middle given both sides. Half of the
 FIM documents use the PSM order and half SPM; see fim_transform.
 
-Tokenization runs on all cores. The per-worker tokenizer cache makes this
-mostly dictionary lookups, about 5 to 10 MB/s per core in pure Python.
+Tokenization runs on all cores in chunks of a few thousand documents. The
+per-worker tokenizer cache makes this mostly dictionary lookups, a few MB/s per
+core in pure Python.
 """
 
 import argparse
@@ -40,6 +41,7 @@ import pyarrow.parquet as pq  # noqa: E402
 
 _tok: Tokenizer | None = None
 _cfg: dict = {}
+CHUNK_DOCS = 4000
 
 
 def fim_transform(text: str, rng: random.Random, spm_rate: float) -> str:
@@ -62,21 +64,26 @@ def fim_transform(text: str, rng: random.Random, spm_rate: float) -> str:
 def _init(tok_path: str, cfg: dict) -> None:
     global _tok, _cfg
     _tok = Tokenizer.load(tok_path)
+    _tok.cache_limit = 200_000   # 24 workers x a 2M-entry memo was what ran the box out of RAM
     _cfg = cfg
 
 
-def _encode_group(job: tuple[str, int, str, bool, int, int]) -> tuple[str, int, np.ndarray, int]:
-    """Tokenize one parquet row group (or the first max_docs rows of it).
+def _encode_group(job: tuple[str, int, int, int, str, bool, int, int]) -> tuple[str, int, np.ndarray, int]:
+    """Tokenize a slice of one parquet row group.
 
-    Row groups are the unit of work rather than whole files so that no single
-    result is more than a few hundred MB and the pool's output queue stays small.
+    The unit of work is CHUNK_DOCS documents, not a whole file or even a whole
+    row group: Stack-Edu's row groups are 100,000 files, and a worker holding
+    100,000 decoded strings plus their token lists is a couple of GB. The first
+    version of this script used whole row groups and the OOM killer took it out
+    at 30GB. Re-reading a row group to take a slice of it costs a little
+    decompression; it is nothing next to tokenization.
     """
-    path, group, column, is_code, max_docs, seed = job
+    path, group, offset, count, column, is_code, max_docs, seed = job
     rng = random.Random(seed)
     clean = clean_code if is_code else clean_text
     out: list[np.ndarray] = []
     n_docs = 0
-    texts = pq.ParquetFile(path).read_row_group(group, columns=[column]).column(0).to_pylist()
+    texts = pq.ParquetFile(path).read_row_group(group, columns=[column]).slice(offset, count).column(0).to_pylist()
     for t in texts:
         t = clean(t)
         if t is None:
@@ -164,10 +171,15 @@ def main() -> None:
             writer = ShardWriter(os.path.join(args.out, name), args.shard_tokens, args.val_tokens)
             jobs = []
             for f in files:
-                groups = range(pq.ParquetFile(f).num_row_groups)
+                pf = pf_meta = pq.ParquetFile(f)
+                groups = range(pf.num_row_groups)
                 if args.max_docs:
                     groups = range(min(2, len(groups)))
-                jobs.extend((f, g, src.column, src.is_code, args.max_docs, args.seed + len(jobs)) for g in groups)
+                for g in groups:
+                    n_rows = pf_meta.metadata.row_group(g).num_rows
+                    for off in range(0, n_rows, CHUNK_DOCS):
+                        jobs.append((f, g, off, min(CHUNK_DOCS, n_rows - off), src.column, src.is_code,
+                                     args.max_docs, args.seed + len(jobs)))
             # Shuffle the row groups (seeded) so the token stream, and therefore the val
             # split at its head, is a mix of files rather than the first file in order.
             # Stack-Edu shards are fetched best-score-first, so without this the val
@@ -178,8 +190,8 @@ def main() -> None:
             for i, (path, group, arr, n) in enumerate(pool.imap(_encode_group, jobs)):
                 writer.add(arr)
                 docs += n
-                if i % 20 == 0 or i == len(jobs) - 1:
-                    print(f"  {name}: {i + 1}/{len(jobs)} groups, {docs:,} docs, "
+                if i % 100 == 0 or i == len(jobs) - 1:
+                    print(f"  {name}: {i + 1}/{len(jobs)} chunks, {docs:,} docs, "
                           f"{writer.total / 1e9:.3f}B tokens", flush=True)
             writer.close()
             dt = time.time() - t0

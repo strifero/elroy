@@ -84,6 +84,7 @@ class Tokenizer:
         self.id_to_special: dict[int, str] = {v: k for k, v in self.special_ids.items()}
         self._special_re = regex.compile("(" + "|".join(regex.escape(s) for s in specials) + ")")
         self._cache: dict[bytes, list[int]] = {}
+        self.cache_limit = 2_000_000   # per-word memo; lower it in memory-tight worker processes
         self.eot = self.special_ids["<|endoftext|>"]
 
     # ---------------------------------------------------------------- encoding
@@ -110,7 +111,7 @@ class Tokenizer:
             ids = cache.get(w)
             if ids is None:
                 ids = self._bpe(w)
-                if len(cache) < 2_000_000:
+                if len(cache) < self.cache_limit:
                     cache[w] = ids
             out.extend(ids)
         return out
