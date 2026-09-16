@@ -246,8 +246,14 @@ def main() -> None:
                 loader_states, rng_states = [loader.state()], [rng]
             if master:
                 save_checkpoint(latest, raw_model, optimizer, step, tokens_seen, loader_states, cfg, rng_states)
+                # Keep a permanent copy the first time a checkpoint lands past each
+                # milestone_every_tokens boundary. The first version tested whether
+                # *this* step crossed the boundary, which only fires on the step that
+                # does, and checkpoints happen every 250 steps: 5B tokens is step
+                # 9,537, no checkpoint is written there, and the 5B milestone was lost.
                 milestone = tcfg.get("milestone_every_tokens", 0)
-                if milestone and tokens_seen % milestone < tcfg["tokens_per_step"]:
+                since_last = tcfg["checkpoint_every"] * tcfg["tokens_per_step"]
+                if milestone and tokens_seen // milestone > (tokens_seen - since_last) // milestone:
                     os.link(latest, os.path.join(run_dir, f"step-{step:07d}.pt"))
                 print(f"checkpoint saved at step {step}", flush=True)
             t_last = time.time()
