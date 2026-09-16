@@ -102,6 +102,10 @@ Every 250 steps (about 55 minutes) the loop writes `checkpoints/elroy-350m/lates
 
 Resuming is the same command with no extra flags. We tested it: run 6 steps, stop, run 8 more, and the step counter, learning rate and loss continue as if nothing happened. Resuming on a different number of GPUs restores the model and optimizer but restarts the data order from a fresh permutation, and says so.
 
+That test was on the mini config, and the first real resume of the 350M run, at step 13,000, ran one step and died with CUDA out of memory. The checkpoint was loaded with `map_location=device`, straight onto the GPU. `load_state_dict` copies the tensors into the parameters that already live there and the optimizer casts its state to match, so the loaded dict is a second copy of everything, 4.3GB, and it stayed alive because the variable holding it was never dropped. At 17.3GB of a 20GB card there is no room for a second copy of the model and optimizer. The fix is two lines: load to CPU, and `del` the dict once its contents have been copied. The mini config never showed it because 42M parameters times two fits anywhere. Test resume at the scale you are going to run.
+
+A second bug surfaced the same day: the milestone check tested whether the current step had crossed a 5B-token boundary, but checkpoints are only written every 250 steps and 5B tokens is step 9,537, so the condition could never be true on a step that writes a checkpoint. The 5B milestone was lost; the check now fires on the first checkpoint past each boundary, and the step-12,750 checkpoint (6.7B tokens) stands in for it.
+
 ## Evaluation during training
 
 Every 250 steps the loop computes the loss on 64 held-out windows per source. Four numbers, not one: `python_edu`, `python_stack`, `fineweb_edu`, `cosmopedia`. Watching them separately is what tells you whether the code is improving or whether the English is carrying the average. The log is a JSONL file with one record per step, which Chapter 5 turns into curves.

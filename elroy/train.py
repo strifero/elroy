@@ -154,7 +154,12 @@ def main() -> None:
     step, tokens_seen = 0, 0
     latest = os.path.join(run_dir, "latest.pt")
     if not args.no_resume and os.path.exists(latest):
-        ck = torch.load(latest, map_location=device, weights_only=False)
+        # Load to CPU, not to the GPU. load_state_dict copies into the parameters that
+        # already live on the device and the optimizer casts its state to match, so
+        # loading straight onto the GPU only adds a second 4.3GB copy of everything
+        # that stays alive as long as `ck` does. The first resume of the 350M run
+        # did exactly that: 18.6GB at step 1 instead of 17.3GB, OOM at step 2.
+        ck = torch.load(latest, map_location="cpu", weights_only=False)
         model.load_state_dict(ck["model"])
         optimizer.load_state_dict(ck["optimizer"])
         step, tokens_seen = ck["step"], ck["tokens"]
@@ -168,6 +173,7 @@ def main() -> None:
                   f"model and optimizer restored, data order restarts from a fresh permutation", flush=True)
         if master:
             print(f"resumed from {latest} at step {step:,} ({tokens_seen / 1e9:.3f}B tokens)", flush=True)
+        del ck
     if step >= anneal_start and "anneal_mix" in dcfg:
         loader.set_mix(dcfg["anneal_mix"])
 
