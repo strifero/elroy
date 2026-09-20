@@ -20,7 +20,7 @@ Its scores on the standard coding tests are [X]% on HumanEval and [Y]% on MBPP. 
 
 ## What it cost
 
-Two NVIDIA RTX A4500 cards, which are workstation cards you can buy retail, about six days of continuous training, and roughly 160 gigabytes of disk. The electricity was [about $Z]. No cloud, no API bills, no data we did not have the right to use. Every dataset is public and permissively licensed, and the model card lists each one.
+Two NVIDIA RTX A4500 cards, which are workstation cards you can buy retail, about six days of continuous training, and roughly 160 gigabytes of disk. The electricity was about $21 at our 27 cents per kilowatt-hour. No cloud, no API bills, no data we did not have the right to use. Every dataset is public and permissively licensed, and the model card lists each one.
 
 ## What we learned
 

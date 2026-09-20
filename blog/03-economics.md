@@ -18,7 +18,7 @@ This is the same discipline we apply to anything we run for clients. Vendor figu
 
 ## The run
 
-Six days of continuous training, 38,146 update steps, each consuming about half a million tokens of text. A checkpoint saved every 55 minutes so that a crash costs an hour, not a week. Roughly 160 gigabytes of disk for the data and the saved states. The power draw of the two cards under load is about 400 watts, so the run consumed about [Z] kilowatt-hours, or [about $Z] at our rate.
+Six days of continuous training, 38,146 update steps, each consuming about half a million tokens of text. A checkpoint saved every 55 minutes so that a crash costs an hour, not a week. Roughly 160 gigabytes of disk for the data and the saved states. The two cards draw about 400 watts under load and the rest of the machine about 150, so the run consumed roughly 79 kilowatt-hours over its 143 hours, about $21 at our rate of 27 cents. The cards alone were $15 of that. We did not put a meter on it; those are rated draws at the 100% utilization the cards reported the whole time.
 
 For scale: the first version of the model this compares to, GPT-2 in 2019, was trained on a cluster of data-center accelerators at a company with a nine-figure budget. Seven years later, a somewhat smaller but better-trained equivalent is a week on a workstation. That curve is the single most important fact about where this technology is going, and it is why "AI" will not stay a thing you can only rent.
 
