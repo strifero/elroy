@@ -13,10 +13,30 @@ import matplotlib
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt  # noqa: E402
 import numpy as np  # noqa: E402
+from matplotlib.ticker import NullFormatter, FixedFormatter, FixedLocator  # noqa: E402
 
 SURFACE, INK, INK2, GRID = "#fcfcfb", "#0b0b0b", "#52514e", "#e6e5e1"
 SERIES = ["#2a78d6", "#eb6834", "#1baf7a", "#eda100"]   # blue, orange, aqua, yellow
 ANNEAL_START_TOKENS = 18e9
+
+
+def log_ticks(ax, ticks):
+    """Log y axis with plain-number ticks and no 6x10^0 minor labels."""
+    ax.set_yscale("log")
+    ax.yaxis.set_major_locator(FixedLocator(ticks))
+    ax.yaxis.set_major_formatter(FixedFormatter([str(t) for t in ticks]))
+    ax.yaxis.set_minor_locator(FixedLocator([]))
+    ax.yaxis.set_minor_formatter(NullFormatter())
+
+
+def spread(ys, min_gap):
+    """Push label y positions apart (in log space) so end labels never overlap."""
+    order = np.argsort(ys)
+    ly = np.log(np.array(ys, dtype=float))
+    for a, b in zip(order, order[1:]):
+        if ly[b] - ly[a] < min_gap:
+            ly[b] = ly[a] + min_gap
+    return np.exp(ly)
 
 
 def style(ax, xlabel, ylabel):
@@ -63,11 +83,10 @@ def main():
     # ---- figure 1: train loss
     fig, ax = plt.subplots(figsize=(9, 4.2), dpi=160)
     style(ax, "tokens (billions)", "training loss (log scale)")
-    ax.set_yscale("log")
+    log_ticks(ax, [1.5, 2, 3, 5, 10])
     ax.plot(tok, loss, color=SERIES[0], alpha=0.15, lw=0.6)
     sm = ema(loss)
     ax.plot(tok, sm, color=SERIES[0], lw=2, solid_capstyle="round")
-    ax.set_yticks([1.5, 2, 3, 5, 10]); ax.set_yticklabels(["1.5", "2", "3", "5", "10"])
     ax.set_xlim(0, 20.6); ax.set_ylim(1.4, 11)
     shade_anneal(ax)
     ax.text(tok[-1] + 0.15, sm[-1], f"{sm[-1]:.2f}", color=INK, fontsize=9, va="center")
@@ -77,13 +96,14 @@ def main():
     # ---- figure 2: validation loss per source
     fig, ax = plt.subplots(figsize=(9, 4.6), dpi=160)
     style(ax, "tokens (billions)", "validation loss (log scale)")
-    ax.set_yscale("log")
+    log_ticks(ax, [1.2, 1.5, 2, 3, 5])
     xs = [t for t, _ in val]
+    finals = [val[-1][1][s] for s in sources]
+    label_y = spread(finals, 0.055)
     for i, s in enumerate(sources):
         ys = [v[s] for _, v in val]
         ax.plot(xs, ys, color=SERIES[i], lw=2, label=s, solid_capstyle="round")
-        ax.text(xs[-1] + 0.15, ys[-1], f"{s} {ys[-1]:.2f}", color=INK, fontsize=8.5, va="center")
-    ax.set_yticks([1.2, 1.5, 2, 3, 5]); ax.set_yticklabels(["1.2", "1.5", "2", "3", "5"])
+        ax.text(xs[-1] + 0.15, label_y[i], f"{s} {ys[-1]:.2f}", color=INK, fontsize=8.5, va="center")
     ax.set_xlim(0, 24.5); ax.set_ylim(1.1, 6.5)
     shade_anneal(ax)
     ax.legend(frameon=False, fontsize=8.5, labelcolor=INK2, loc="upper right")
