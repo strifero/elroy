@@ -74,8 +74,8 @@ def main() -> None:
     ap.add_argument("--data", default="data/sft")
     ap.add_argument("--out", required=True)
     ap.add_argument("--epochs", type=float, default=2.0)
-    ap.add_argument("--batch-size", type=int, default=8)
-    ap.add_argument("--grad-accum", type=int, default=4)
+    ap.add_argument("--batch-size", type=int, default=4)   # 4 x 2048 fits a 20GB card; 8 does not
+    ap.add_argument("--grad-accum", type=int, default=8)   # 32 examples per optimizer step
     ap.add_argument("--lr", type=float, default=5e-5)
     ap.add_argument("--warmup", type=int, default=50)
     ap.add_argument("--weight-decay", type=float, default=0.0)
@@ -87,10 +87,13 @@ def main() -> None:
     device = torch.device("cuda" if torch.cuda.is_available() else "cpu")
     dtype = torch.bfloat16
     torch.manual_seed(args.seed)
-    ck = torch.load(args.base, map_location=device, weights_only=False)
+    # Load to CPU and drop the dict: the pretraining checkpoint is 4.3GB with its
+    # optimizer state, and on the GPU it would sit next to the live model (Chapter 4).
+    ck = torch.load(args.base, map_location="cpu", weights_only=False)
     cfg = ck["config"]
     model = Elroy(ModelConfig(**cfg["model"])).to(device)
     model.load_state_dict({k.removeprefix("_orig_mod."): v for k, v in ck["model"].items()})
+    del ck
     raw = model
     if not args.no_compile and device.type == "cuda":
         model = torch.compile(model, dynamic=True)   # batch shapes vary, so allow dynamic shapes

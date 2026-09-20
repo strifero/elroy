@@ -62,7 +62,7 @@ def load_bench(name: str) -> list[dict]:
     raise ValueError(name)
 
 
-def run_tests(program: str, timeout: float = 10.0, mem_mb: int = 1024) -> tuple[bool, str]:
+def run_tests(program: str, timeout: float = 10.0, mem_mb: int = 4096) -> tuple[bool, str]:
     def limits() -> None:
         resource.setrlimit(resource.RLIMIT_AS, (mem_mb * 2**20, mem_mb * 2**20))
         resource.setrlimit(resource.RLIMIT_CPU, (int(timeout) + 1, int(timeout) + 1))
