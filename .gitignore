@@ -9,3 +9,4 @@ runs/
 *.pt
 .DS_Store
 logs/
+release/
