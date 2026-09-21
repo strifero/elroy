@@ -16,7 +16,7 @@ The only way to answer those with confidence is to have built one. So we did, an
 
 A 360-million-parameter model, trained on about 20 billion tokens of text, roughly two thirds Python source code and one third English. It uses the same architecture as the open models released over the last two years, at a fraction of the size. After training it was taught to answer questions in a chat format, so you can ask it to write a function or explain what a dictionary is, and it will.
 
-Its scores on the standard coding tests are [X]% on HumanEval and [Y]% on MBPP. For comparison, the first version of GitHub Copilot in 2021 scored about 29% on the first of those with a model 33 times larger. Elroy is honest about its limits because we wrote its limits into its training data.
+Its scores on the standard coding tests are 27% on HumanEval and 39% on MBPP. For comparison, the first version of GitHub Copilot in 2021 scored about 29% on the first of those with a model 33 times larger. Elroy is honest about its limits because we wrote its limits into its training data.
 
 ## What it cost
 
