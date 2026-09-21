@@ -104,7 +104,11 @@ def main() -> None:
     results = []
     for i, prob in enumerate(problems):
         if args.chat:
-            task = prob.get("task") or f"Complete the following Python function.\n\n```python\n{prob['prompt']}```"
+            # MBPP: the standard prompt (Austin et al. 2021) shows the tests, because the
+            # task text does not name the function; without them the model picks its own
+            # name and every test fails with NameError (2.5% on the first attempt).
+            task = (f"{prob['task']}\n\nYour code should pass these tests:\n\n```python\n{prob['test'].strip()}\n```"
+                    if prob.get("task") else f"Complete the following Python function.\n\n```python\n{prob['prompt']}```")
             if prob["entry"] is not None:
                 task = f"Complete this Python function so it does what the docstring says. Reply with the full function.\n\n```python\n{prob['prompt']}```"
             ids = tok.encode(build_prompt(task))
