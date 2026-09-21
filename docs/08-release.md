@@ -61,7 +61,7 @@ python scripts/export_hf.py ... --push strifero/elroy-350m-chat
 
 `--push` creates the Hub repository and uploads the folder. The weights are Apache-2.0, matching the code, and the card lists every dataset license so that a reader can make their own call about the "no license detected" share of Stack-Edu that Chapter 1 discusses.
 
-[PUBLISH_STATUS]
+Published on September 20, 2026: [strifero/elroy-350m-base](https://huggingface.co/strifero/elroy-350m-base) and [strifero/elroy-350m-chat](https://huggingface.co/strifero/elroy-350m-chat), 721MB each. The repository went public the same day.
 
 ## What to do next
 

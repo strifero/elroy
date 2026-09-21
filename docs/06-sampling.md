@@ -27,7 +27,7 @@ Each new token re-runs the whole forward pass over everything so far, so generat
 ## Fill in the middle
 
 ```bash
-python -m elroy.sample --ckpt checkpoints/elroy-350m/latest.pt --fim "def add(a, b):\n" "\n\nprint(add(2, 3))\n"
+python -m elroy.sample --ckpt checkpoints/elroy-350m/base-final.pt --fim "def add(a, b):\n" "\n\nprint(add(2, 3))\n"
 ```
 
 This lays out the prompt exactly as Chapter 4's FIM transformation did during training, `<|fim_prefix|>{prefix}<|fim_suffix|>{suffix}<|fim_middle|>`, and the model produces the middle. Because half of the code the model saw in pretraining was in this form, it needs no fine-tuning to do it.
@@ -35,16 +35,16 @@ This lays out the prompt exactly as Chapter 4's FIM transformation did during tr
 ## The REPL
 
 ```bash
-python -m elroy.sample --ckpt checkpoints/elroy-350m/latest.pt --repl
+python -m elroy.sample --ckpt checkpoints/elroy-350m/base-final.pt --repl
 ```
 
 Type a prompt, get a continuation. The base model is a text continuer, not an assistant, so prompts should look like the start of a Python file: a signature and a docstring, a comment describing what comes next, an import. Chapter 7 is what turns this into something you can ask a question.
 
 ## Samples from Elroy-350M base
 
-```
-(filled in from the trained model)
-```
+`scripts/sample_base.py` runs a fixed set of prompts through a checkpoint with `T = 0.2`, `top_p = 0.95`, seed 0, so that milestones and revisions can be compared on identical inputs. The full output for the released base model is in `results/base/samples.md` and Chapter 5 walks through it: `is_prime` and the linked-list reversal correct, `word_counts` plausibly wrong, the Providence sentence repeating until the token limit. One sample belongs here because it is about the sampler rather than the model.
+
+Asked to continue "The city of Providence, Rhode Island, is", the model wrote that Providence is the largest city in the United States and then said so again, with small variations, for 200 tokens. Greedy decoding would have produced the identical sentence over and over; at `T = 0.2` the loop drifts but never escapes. This is not a fact the model lacks so much as a failure of the sampler to notice that it has been here before. The standard patch is a repetition penalty: divide the logits of tokens that already appear in the context by a factor a little above 1 (1.1 to 1.3 is typical) before sampling. It makes loops decay into stopping rather than filling the budget, and it is a sampler knob, not a model improvement: the model still has nothing true to say about Providence. `generate` deliberately does not include it, so that what you see in the samples is what the model believes; the chat server in Chapter 8 is where a knob like that belongs, next to the other things that shape what a person sees.
 
 ## Next
 
