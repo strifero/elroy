@@ -1,0 +1,23 @@
+{
+  "sample_mb": 800.0,
+  "vocab_size": 32768,
+  "unique_pretokens": 2481112,
+  "held_out": {
+    "python_edu": {
+      "bytes_per_token": 3.6098509096644307,
+      "tokens_per_line": 8.228015267175573
+    },
+    "python_stack": {
+      "bytes_per_token": 3.9795011094036505,
+      "tokens_per_line": 9.219583472052676
+    },
+    "fineweb_edu": {
+      "bytes_per_token": 4.28730556782111,
+      "tokens_per_line": 55.49190938511327
+    },
+    "cosmopedia": {
+      "bytes_per_token": 5.034816409136175,
+      "tokens_per_line": 25.44882275997384
+    }
+  }
+}
