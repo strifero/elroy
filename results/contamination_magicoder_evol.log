@@ -1,0 +1,5 @@
+
+== Magicoder-Evol-Instruct-110K: 111,183 examples scanned
+HumanEval problems whose docstring appears verbatim: 52  (116 examples)
+HumanEval problems whose canonical solution half-matches by 13-gram: 8  (66 examples)
+problems: 1, 100, 101, 103, 106, 107, 108, 109, 11, 113, 117, 119, 120, 121, 132, 136, 141, 147, 149, 154, 156, 159, 162, 163, 17, 18, 19, 20, 24, 25, 27, 3, 32, 33, 36, 37, 38, 40, 41, 43, 5, 53, 62, 63, 71, 73, 74, 75, 8, 80, 82, 88, 89, 9, 98, 99

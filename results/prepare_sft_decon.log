@@ -1,0 +1,18 @@
+val: 1,677 examples, mean 517 tokens, 509,660 supervised tokens
+train: 82,198 examples, mean 527 tokens, 25,126,183 supervised tokens
+{
+  "oss_instruct": {
+    "seen": 38284,
+    "kept": 36959,
+    "contaminated": 5
+  },
+  "evol_codealpaca": {
+    "seen": 111272,
+    "kept": 46736,
+    "contaminated": 447
+  },
+  "handwritten": {
+    "seen": 180,
+    "kept": 180
+  }
+}

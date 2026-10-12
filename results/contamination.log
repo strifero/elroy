@@ -1,0 +1,61 @@
+== chat-model HumanEval passes vs canonical solution
+task           new?   ratio  lines_in_common
+HumanEval/116  new     0.73       0 of 1   canonical lines
+HumanEval/43   new     0.47       2 of 5   canonical lines
+HumanEval/18   new     0.43       2 of 5   canonical lines
+HumanEval/60           0.40       0 of 1   canonical lines
+HumanEval/25   new     0.37       5 of 12  canonical lines
+HumanEval/50           0.34       1 of 1   canonical lines
+HumanEval/51   new     0.31       0 of 1   canonical lines
+HumanEval/3    new     0.30       6 of 6   canonical lines
+HumanEval/152  new     0.28       0 of 1   canonical lines
+HumanEval/72   new     0.27       2 of 9   canonical lines
+HumanEval/23           0.25       1 of 1   canonical lines
+HumanEval/47   new     0.24       1 of 5   canonical lines
+HumanEval/35           0.24       0 of 5   canonical lines
+HumanEval/34           0.23       0 of 1   canonical lines
+HumanEval/16   new     0.21       1 of 1   canonical lines
+HumanEval/53           0.20       1 of 1   canonical lines
+HumanEval/13           0.20       2 of 3   canonical lines
+HumanEval/28           0.20       1 of 1   canonical lines
+HumanEval/98   new     0.17       3 of 5   canonical lines
+HumanEval/49   new     0.16       0 of 4   canonical lines
+HumanEval/45           0.15       0 of 1   canonical lines
+HumanEval/162  new     0.14       1 of 2   canonical lines
+HumanEval/114  new     0.13       1 of 11  canonical lines
+HumanEval/11   new     0.13       0 of 6   canonical lines
+HumanEval/31           0.13       2 of 6   canonical lines
+HumanEval/42           0.12       0 of 1   canonical lines
+HumanEval/29           0.11       0 of 1   canonical lines
+HumanEval/56   new     0.10       1 of 9   canonical lines
+HumanEval/143  new     0.09       0 of 11  canonical lines
+HumanEval/12           0.09       2 of 6   canonical lines
+HumanEval/52           0.09       0 of 4   canonical lines
+HumanEval/48           0.08       0 of 4   canonical lines
+HumanEval/59   new     0.08       0 of 12  canonical lines
+HumanEval/66   new     0.07       0 of 2   canonical lines
+HumanEval/121  new     0.06       0 of 1   canonical lines
+HumanEval/61   new     0.06       1 of 9   canonical lines
+HumanEval/58           0.06       0 of 6   canonical lines
+HumanEval/156  new     0.06       0 of 14  canonical lines
+HumanEval/22           0.06       0 of 1   canonical lines
+HumanEval/30           0.05       0 of 1   canonical lines
+HumanEval/10   new     0.04       1 of 6   canonical lines
+HumanEval/83   new     0.01       0 of 2   canonical lines
+HumanEval/27           0.01       0 of 1   canonical lines
+HumanEval/7            0.00       0 of 1   canonical lines
+
+44 passes, 24 new vs base, 0 with ratio >= 0.9 vs canonical
+
+== evol-codealpaca-v1: 111,272 examples scanned
+HumanEval problems whose docstring appears verbatim: 60  (156 examples)
+HumanEval problems whose canonical solution half-matches by 13-gram: 8  (67 examples)
+problems: 1, 100, 101, 103, 106, 107, 108, 109, 11, 113, 117, 119, 120, 121, 13, 131, 132, 136, 140, 141, 144, 147, 149, 154, 156, 159, 162, 163, 17, 18, 19, 20, 24, 25, 27, 3, 30, 32, 33, 34, 36, 37, 38, 40, 41, 43, 5, 53, 62, 63, 65, 71, 73, 74, 75, 8, 80, 82, 88, 89, 9, 96, 98, 99
+
+== Magicoder-OSS-Instruct-75K: 75,197 examples scanned
+HumanEval problems whose docstring appears verbatim: 0  (0 examples)
+HumanEval problems whose canonical solution half-matches by 13-gram: 1  (1 examples)
+problems: 19
+
+== overlap: 9 of the 24 chat-only passes are on problems flagged in the SFT data: 11, 121, 156, 162, 18, 25, 3, 43, 98
+   14 of all 44 chat passes are on flagged problems

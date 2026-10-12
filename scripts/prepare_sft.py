@@ -45,16 +45,25 @@ def looks_python(reply: str) -> bool:
     return parses_py3(code)
 
 
-def load_pairs(limit: int) -> list[tuple[str, str, str]]:
+EVOL_SOURCES = {
+    # (dataset id, instruction field, reply field)
+    "codealpaca": ("theblackcat102/evol-codealpaca-v1", "instruction", "output"),
+    # the same data after Magicoder's benchmark decontamination
+    "magicoder": ("ise-uiuc/Magicoder-Evol-Instruct-110K", "instruction", "response"),
+}
+
+
+def load_pairs(limit: int, evol: str = "codealpaca") -> list[tuple[str, str, str]]:
     from datasets import load_dataset
     pairs = []
     ds = load_dataset("ise-uiuc/Magicoder-OSS-Instruct-75K", split="train")
     for r in ds:
         if r.get("lang", "python") == "python":
             pairs.append(("oss_instruct", r["problem"], r["solution"]))
-    ds = load_dataset("theblackcat102/evol-codealpaca-v1", split="train")
+    name, fi, fo = EVOL_SOURCES[evol]
+    ds = load_dataset(name, split="train")
     for r in ds:
-        pairs.append(("evol_codealpaca", r["instruction"], r["output"]))
+        pairs.append((f"evol_{evol}", r[fi], r[fo]))
     if limit:
         random.Random(0).shuffle(pairs)
         pairs = pairs[:limit]
@@ -67,6 +76,10 @@ def main() -> None:
     ap.add_argument("--out", default="data/sft")
     ap.add_argument("--max-len", type=int, default=2048)
     ap.add_argument("--limit", type=int, default=0)
+    ap.add_argument("--evol", choices=sorted(EVOL_SOURCES), default="codealpaca",
+                    help="which Evol-Instruct set; magicoder is Magicoder's filtered copy")
+    ap.add_argument("--decontaminate", action="store_true",
+                    help="drop examples containing HumanEval/MBPP problems or solutions (elroy/decontam.py)")
     ap.add_argument("--handwritten-repeats", type=int, default=4,
                     help="the identity/concept set is small; repeat it so it is not drowned out")
     ap.add_argument("--val-frac", type=float, default=0.02)
@@ -90,7 +103,16 @@ def main() -> None:
         c["kept"] += 1
         examples.append(ex)
 
-    for source, user, assistant in load_pairs(args.limit):
+    dc = None
+    if args.decontaminate:
+        from elroy.decontam import Decontaminator
+        dc = Decontaminator()
+    for source, user, assistant in load_pairs(args.limit, args.evol):
+        if dc is not None and not dc.keep(user, assistant):
+            c = counts.setdefault(source, {"seen": 0, "kept": 0})
+            c["seen"] += 1
+            c["contaminated"] = c.get("contaminated", 0) + 1
+            continue
         add(source, user, assistant, check=True)
 
     hw = args.handwritten
@@ -118,7 +140,9 @@ def main() -> None:
         print(f"{split}: {len(exs):,} examples, mean {lengths.mean():.0f} tokens, "
               f"{int(mask.sum()):,} supervised tokens")
     with open(os.path.join(args.out, "manifest.json"), "w") as f:
-        json.dump({"counts": counts, "train": len(examples) - n_val, "val": n_val,
+        json.dump({"counts": counts,
+                   "decontaminated": dc is not None,
+                   "benchmark_hits": dict(sorted(dc.hits.items())) if dc else {}, "train": len(examples) - n_val, "val": n_val,
                    "max_len": args.max_len}, f, indent=2)
     print(json.dumps(counts, indent=2))
 
